@@ -32,10 +32,14 @@ The tool applies adversarial perturbations to images by disrupting:
 
 This reduces identity consistency across AI systems.
 
+
+## HAVE IDEA TO MAKE IT ADVANCE?? YOU CAN MODIFY AND UPLOAD IT AS YOURS, I DON'T DO COPYRIGHT, SO LET'S TAKE A STEP TO STAND AGAINST DEEPFAKES.
+
+
 ## 📌 Usage
 
 ```bash
-python3 ANTI-DEEPFAKES_DEFENSE.py input.jpg output.png'''
+python3 ANTI-DEEPFAKES_DEFENSE.py input.jpg output.png
 
 
-## HAVE IDEA TO MAKE IT ADVANCE?? YOU CAN MODIFY AND UPLOAD IT AS YOURS, I DON'T DO COPYRIGHT, SO LET'S TAKE A STEP TO STAND AGAINST DEEPFAKES.
+
