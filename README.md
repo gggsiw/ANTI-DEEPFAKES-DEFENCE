@@ -39,7 +39,7 @@ This reduces identity consistency across AI systems.
 ## 📌 Usage
 
 ```bash
-python3 ANTI-DEEPFAKES_DEFENSE.py input.jpg output.png
+python3 pixelguard.py input.jpg output.png
 
 
 
