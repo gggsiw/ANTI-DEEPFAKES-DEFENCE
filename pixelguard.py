@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 print("""
 =========================================================
-🛡️ OFFLINE IMAGE HARDENING TOOL (ANTI-DEEPFAKE DEFENSE)
+🛡️ PixelGuard (ANTI-DEEPFAKE DEFENSE)
 =========================================================
 
 WHAT THIS TOOL DOES:
@@ -67,8 +67,8 @@ import random
 import os
 
 print("""COMMANDS EXAPLES :-
-1. python3 ANTI-DEEPFAKES_DEFENSE.py myphoto.jpg protected.png
-2. python3 ANTI-DEEPFAKES_DEFENSE.py myphoto.jpg protected.png --steps 50 --epsilon 0.03 --alpha 0.004
+1. python3 pixelguard.py myphoto.jpg protected.png
+2. python3 pixelguard.py myphoto.jpg protected.png --steps 50 --epsilon 0.03 --alpha 0.004
 """)
 #so guys this is optional: install open_clip beforehand (offline wheel)
 import open_clip
