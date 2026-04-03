@@ -69,6 +69,10 @@ import argparse
 import open_clip
 import torchvision.transforms as transforms
 
+print("""COMMANDS EXAPLES :-
+1. python3 pixelguard.py myphoto.jpg protected.png
+2. python3 pixelguard.py myphoto.jpg protected.png --steps 50 --epsilon 0.03 --alpha 0.004
+""")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
