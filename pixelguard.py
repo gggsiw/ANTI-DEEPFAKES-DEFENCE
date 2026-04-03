@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 print("""
 =========================================================
@@ -59,151 +60,106 @@ This tool uses:
 =========================================================
 """)
 
+
+
 import torch
 import torch.nn.functional as F
-from torchvision import models, transforms
 from PIL import Image
-import random
-import os
-
-print("""COMMANDS EXAPLES :-
-1. python3 pixelguard.py myphoto.jpg protected.png
-2. python3 pixelguard.py myphoto.jpg protected.png --steps 50 --epsilon 0.03 --alpha 0.004
-""")
-#so guys this is optional: install open_clip beforehand (offline wheel)
+import argparse
 import open_clip
+import torchvision.transforms as transforms
+
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-#so guys this is robust transformations
-def random_transform(x):
-    if random.random() < 0.7:
-        scale = random.choice([460, 480, 500, 520])
-        x = F.interpolate(x, size=(scale, scale), mode='bilinear', align_corners=False)
-        x = F.interpolate(x, size=(512, 512), mode='bilinear', align_corners=False)
+model, _, preprocess = open_clip.create_model_and_transforms(
+    'ViT-B-32',
+    pretrained='openai'
+)
+model = model.to(device)
+model.eval()
 
-    if random.random() < 0.5:
-        noise = torch.randn_like(x) * 0.01
-        x = torch.clamp(x + noise, 0, 1)
+CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
+CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
-    return x
 
-#this section is smoothness
-def total_variation(x):
-    return torch.mean(torch.abs(x[:, :, :-1] - x[:, :, 1:])) + \
-           torch.mean(torch.abs(x[:, :, :, :-1] - x[:, :, :, 1:]))
 
-#ths is frequency perturbation
-def frequency_noise(x):
-    fft = torch.fft.fft2(x)
-    perturb = torch.randn_like(fft) * 0.01
-    fft = fft + perturb
-    return torch.real(torch.fft.ifft2(fft))
+def denormalize(tensor):
+    mean = torch.tensor(CLIP_MEAN).view(1, 3, 1, 1).to(tensor.device)
+    std = torch.tensor(CLIP_STD).view(1, 3, 1, 1).to(tensor.device)
+    return tensor * std + mean
 
-#this for main protection
-def protect_image(input_path, output_path, steps=50, epsilon=0.035, alpha=0.004):
-    print("\n🛡️ Starting protection...")
 
-    img = Image.open(input_path).convert("RGB")
 
-    preprocess = transforms.Compose([
-        transforms.Resize((512, 512)),
-        transforms.ToTensor()
-    ])
+def protect_image(input_path, output_path, epsilon=0.03, alpha=0.005, steps=30):
 
-    x = preprocess(img).unsqueeze(0).to(device)
+    image = Image.open(input_path).convert("RGB")
 
-    #so guys this is models
-    print("⚙️ Loading models...")
-    resnet = models.resnet50(pretrained=True).to(device).eval()
-    efficientnet = models.efficientnet_b0(pretrained=True).to(device).eval()
+    # Preprocess (CLIP-safe)
+    x = preprocess(image).unsqueeze(0).to(device)
 
-    clip_model, _, _ = open_clip.create_model_and_transforms(
-        'ViT-B-32', pretrained='openai'
-    )
-    clip_model = clip_model.to(device).eval()
-
-    #this is identity baseline
-    with torch.no_grad():
-        res_orig = resnet(x).detach()
-        eff_orig = efficientnet(x).detach()
-        clip_orig = clip_model.encode_image(x).detach()
-
+    # Clone
     x_adv = x.clone().detach()
 
-    print("🚀 Running optimization...")
+    # Original embedding
+    with torch.no_grad():
+        orig_embed = model.encode_image(x)
+
+    print("\n🛡️ Starting PixelGuard Protection...\n")
 
     for step in range(steps):
         x_adv.requires_grad_(True)
 
-        x_t = random_transform(x_adv)
-        x_t = torch.clamp(x_t + 0.1 * frequency_noise(x_t), 0, 1)
+        embed = model.encode_image(x_adv)
 
-        res_out = resnet(x_t)
-        eff_out = efficientnet(x_t)
-        clip_out = clip_model.encode_image(x_t)
+        # Maximize difference
+        loss = -F.cosine_similarity(embed, orig_embed).mean()
 
-
-        loss_res = -F.mse_loss(res_out, res_orig)
-        loss_eff = -F.mse_loss(eff_out, eff_orig)
-        loss_clip = -F.cosine_similarity(clip_out, clip_orig).mean()
-
-        rand_target = torch.randn_like(clip_out)
-        loss_scramble = F.mse_loss(clip_out, rand_target)
-
-        loss_tv = total_variation(x_adv)
-
-        loss = (
-            loss_res +
-            loss_eff +
-            loss_clip +
-            0.6 * loss_scramble +
-            0.08 * loss_tv
-        )
-
-        resnet.zero_grad()
-        efficientnet.zero_grad()
-        clip_model.zero_grad()
-
+        model.zero_grad()
         loss.backward()
 
-        #this is PGD update
-        x_adv = x_adv + alpha * x_adv.grad.sign()
+        # PGD step
+        grad = x_adv.grad.data
+        x_adv = x_adv + alpha * torch.sign(grad)
+
+        # Project back into epsilon ball
         x_adv = torch.max(torch.min(x_adv, x + epsilon), x - epsilon)
-        x_adv = torch.clamp(x_adv, 0, 1).detach()
 
-        if step % 5 == 0:
-            print(f"Step {step}/{steps} | Loss: {loss.item():.4f}")
+        # Detach for next step
+        x_adv = x_adv.detach()
 
-    #this wil save output
-    final_img = transforms.ToPILImage()(x_adv.squeeze(0).cpu())
-    final_img.save(output_path, "PNG")
-
-    print(f"\n✅ DONE → Saved to: {output_path}")
-    print("🛡️ Image is now harder to use for AI models.\n")
+        print(f"Step {step+1}/{steps} - Loss: {-loss.item():.4f}")
 
 
-#CLI usage
+    x_adv = denormalize(x_adv)
+
+    # Clamp AFTER denormalization
+    x_adv = torch.clamp(x_adv, 0, 1)
+
+    # Convert to image
+    x_adv = x_adv.squeeze().cpu()
+    protected_img = transforms.ToPILImage()(x_adv)
+
+    protected_img.save(output_path)
+
+    print(f"\n✅ Protected image saved at: {output_path}")
+
+
 if __name__ == "__main__":
-    import argparse
+    parser = argparse.ArgumentParser(description="PixelGuard - Anti Deepfake Protection")
 
-    parser = argparse.ArgumentParser(description="Offline Anti-Deepfake Image Protection Tool")
     parser.add_argument("input", help="Input image path")
     parser.add_argument("output", help="Output image path")
-    parser.add_argument("--steps", type=int, default=50)
-    parser.add_argument("--epsilon", type=float, default=0.035)
-    parser.add_argument("--alpha", type=float, default=0.004)
+    parser.add_argument("--epsilon", type=float, default=0.03)
+    parser.add_argument("--alpha", type=float, default=0.005)
+    parser.add_argument("--steps", type=int, default=30)
 
     args = parser.parse_args()
-
-    if not os.path.exists(args.input):
-        print("❌ Input file not found")
-        exit()
 
     protect_image(
         args.input,
         args.output,
-        steps=args.steps,
         epsilon=args.epsilon,
-        alpha=args.alpha
+        alpha=args.alpha,
+        steps=args.steps
     )
