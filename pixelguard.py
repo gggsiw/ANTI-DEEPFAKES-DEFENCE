@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 print("""
 =========================================================
@@ -62,6 +61,7 @@ This tool uses:
 
 
 
+
 import torch
 import torch.nn.functional as F
 from PIL import Image
@@ -86,67 +86,81 @@ model.eval()
 CLIP_MEAN = [0.48145466, 0.4578275, 0.40821073]
 CLIP_STD = [0.26862954, 0.26130258, 0.27577711]
 
-
-
-def denormalize(tensor):
-    mean = torch.tensor(CLIP_MEAN).view(1, 3, 1, 1).to(tensor.device)
-    std = torch.tensor(CLIP_STD).view(1, 3, 1, 1).to(tensor.device)
-    return tensor * std + mean
-
+def normalize(img):
+    mean = torch.tensor(CLIP_MEAN).view(1,3,1,1).to(img.device)
+    std = torch.tensor(CLIP_STD).view(1,3,1,1).to(img.device)
+    return (img - mean) / std
 
 
 def protect_image(input_path, output_path, epsilon=0.03, alpha=0.005, steps=30):
 
+
     image = Image.open(input_path).convert("RGB")
 
-    # Preprocess (CLIP-safe)
-    x = preprocess(image).unsqueeze(0).to(device)
 
-    # Clone
-    x_adv = x.clone().detach()
+    to_tensor = transforms.ToTensor()
+    x_orig = to_tensor(image).unsqueeze(0).to(device)
 
-    # Original embedding
+
+    resize_224 = transforms.Resize((224, 224))
+    x_small = resize_224(image)
+    x_small = to_tensor(x_small).unsqueeze(0).to(device)
+
+    x_adv_small = x_small.clone().detach()
+
+
     with torch.no_grad():
-        orig_embed = model.encode_image(x)
+        orig_embed = model.encode_image(normalize(x_small))
 
     print("\n🛡️ Starting PixelGuard Protection...\n")
 
     for step in range(steps):
-        x_adv.requires_grad_(True)
+        x_adv_small.requires_grad_(True)
 
-        embed = model.encode_image(x_adv)
+        embed = model.encode_image(normalize(x_adv_small))
 
-        # Maximize difference
+
         loss = -F.cosine_similarity(embed, orig_embed).mean()
 
         model.zero_grad()
         loss.backward()
 
-        # PGD step
-        grad = x_adv.grad.data
-        x_adv = x_adv + alpha * torch.sign(grad)
+        grad = x_adv_small.grad
 
-        # Project back into epsilon ball
-        x_adv = torch.max(torch.min(x_adv, x + epsilon), x - epsilon)
 
-        # Detach for next step
-        x_adv = x_adv.detach()
+        x_adv_small = x_adv_small + alpha * torch.sign(grad)
+
+
+        x_adv_small = torch.max(
+            torch.min(x_adv_small, x_small + epsilon),
+            x_small - epsilon
+        )
+
+        x_adv_small = torch.clamp(x_adv_small, 0, 1).detach()
 
         print(f"Step {step+1}/{steps} - Loss: {-loss.item():.4f}")
 
 
-    x_adv = denormalize(x_adv)
+    perturbation = x_adv_small - x_small
 
-    # Clamp AFTER denormalization
+    perturbation = torch.nn.functional.interpolate(
+        perturbation,
+        size=x_orig.shape[-2:],
+        mode='bilinear',
+        align_corners=False
+    )
+
+
+    x_adv = x_orig + perturbation
     x_adv = torch.clamp(x_adv, 0, 1)
 
-    # Convert to image
-    x_adv = x_adv.squeeze().cpu()
-    protected_img = transforms.ToPILImage()(x_adv)
 
-    protected_img.save(output_path)
+    output_img = transforms.ToPILImage()(x_adv.squeeze().cpu())
+
+    output_img.save(output_path, quality=95, subsampling=0)
 
     print(f"\n✅ Protected image saved at: {output_path}")
+
 
 
 if __name__ == "__main__":
@@ -154,9 +168,9 @@ if __name__ == "__main__":
 
     parser.add_argument("input", help="Input image path")
     parser.add_argument("output", help="Output image path")
-    parser.add_argument("--epsilon", type=float, default=0.03)
-    parser.add_argument("--alpha", type=float, default=0.005)
-    parser.add_argument("--steps", type=int, default=30)
+    parser.add_argument("--epsilon", type=float, default=0.01)
+    parser.add_argument("--alpha", type=float, default=0.002)
+    parser.add_argument("--steps", type=int, default=20)
 
     args = parser.parse_args()
 
