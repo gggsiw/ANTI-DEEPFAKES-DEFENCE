@@ -1,0 +1,4 @@
+torch>=2.0.0
+torchvision>=0.15.0
+open-clip-torch>=2.20.0
+Pillow>=9.0.0
