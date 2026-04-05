@@ -38,8 +38,12 @@ This reduces identity consistency across AI systems.
 
 ## 📌 Usage
 
-```bash
-python3 pixelguard.py input.jpg output.png
+# Clone repo
+git clone https://github.com/yourusername/PixelGuard
 
+# Install dependencies
+pip install -r requirements.txt
 
+# Run
+python3 pixelguard.py myphoto.jpg protected.png
 
