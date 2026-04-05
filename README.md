@@ -37,7 +37,7 @@ This reduces identity consistency across AI systems.
 
 
 ## 📌 Usage
-'''
+
 # Clone repo
 git clone https://github.com/yourusername/PixelGuard
 
@@ -46,4 +46,4 @@ pip install -r requirements.txt
 
 # Run
 python3 pixelguard.py myphoto.jpg protected.png
-'''
+
