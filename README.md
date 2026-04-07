@@ -2,6 +2,14 @@
 
 An offline image hardening tool designed to make deepfake generation and AI-based identity extraction more difficult.
 
+"PixelGuard — Dual Mode Anti-Deepfake Tool"
+
+
+Mode 1: Protect real images before sharing
+
+
+Mode 2: Detect potentially synthetic images
+
 ## 🚀 Features
 - Fully offline (no data upload)
 - Multi-model adversarial protection (ResNet + EfficientNet + CLIP-like)
