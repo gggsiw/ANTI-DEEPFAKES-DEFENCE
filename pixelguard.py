@@ -161,7 +161,25 @@ def protect_image(input_path, output_path, epsilon=0.03, alpha=0.005, steps=30):
 
     print(f"\n✅ Protected image saved at: {output_path}")
 
-
+def detect_deepfake(image_path):
+    """Simple deepfake detector"""
+    image = Image.open(image_path).convert("RGB")
+    to_tensor = transforms.ToTensor()
+    x = to_tensor(image).unsqueeze(0).to(device)
+    x_small = transforms.Resize((224, 224))(x)
+    
+    with torch.no_grad():
+        embed = model.encode_image(normalize(x_small))
+        
+    # Anomaly score — higher = more suspicious
+    score = torch.norm(embed).item()
+    
+    if score > 25:
+        print("⚠️ POSSIBLY SYNTHETIC — Score:", score)
+    else:
+        print("✅ LIKELY REAL — Score:", score)
+    
+    return score
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PixelGuard - Anti Deepfake Protection")
